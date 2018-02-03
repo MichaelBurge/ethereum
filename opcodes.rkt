@@ -179,3 +179,23 @@
   (if (push-op? op)
       (cast (- (opcode-byte op) #x5f) Byte)
       0))
+
+(: dup-op? (-> opcode Boolean))
+(define (dup-op? op)
+  (define b (opcode-byte op))
+  (and (>= b #x80)
+       (<= b #x8f)))
+
+(: dup-size (-> opcode Integer))
+(define (dup-size op)
+  (- (opcode-byte op) #x7f))
+
+(: swap-op? (-> opcode Boolean))
+(define (swap-op? op)
+  (define b (opcode-byte op))
+  (and (>= b #x90)
+       (<= b #x9f)))
+
+(: swap-size (-> opcode Integer))
+(define (swap-size op)
+  (- (opcode-byte op) #x8f))

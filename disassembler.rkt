@@ -13,12 +13,12 @@
   (let* ([ byte (cast (bytes-or-zero bs i 1) Byte)])
     (if (hash-has-key? *opcodes-by-byte* byte)
         (disassemble-opcode bs i (hash-ref *opcodes-by-byte* byte))
-        (eth-unknown byte))))
+        (eth-bytes (bytes byte)))))
 
 (: disassemble-opcode (-> Bytes Integer opcode EthInstruction))
 (define (disassemble-opcode bs i op)
   (cond ((push-op? op) (disassemble-push bs i))
-        (else          (eth-asm (opcode-name op)))
+        (else          (eth-op (opcode-name op)))
         ))
 
    
@@ -32,39 +32,60 @@
                               (+ i 1) ; start position
                               (+ i 1 (op-extra-size op)))))) ; end
 
-; Outputs 3 column TSV suitable for pasting into Google sheets
+(: for/assembly-cont (-> Bytes (-> Integer EthInstruction (U #f Integer)) Void))
+(define (for/assembly-cont bs act)
+  (: loop (-> Integer Void))
+  (define (loop n)
+    (let ([ ethi (disassemble-one bs n) ])
+      (match (act n ethi)
+        [ #f (void)]
+        [ (? integer? m)
+          (if (>= m (bytes-length bs))
+              (void)
+              (loop m))])))
+  (loop 0))
+
+(: for/assembly (-> Bytes (-> Integer EthInstruction Void) Void))
+(define (for/assembly bs act)
+  (: loop (-> Integer EthInstruction Integer))
+  (define (loop n ethi)
+    (act n ethi)
+    (+ n (instruction-size ethi)))
+  (for/assembly-cont bs loop))
+
+(: disassemble (-> SymbolTable Bytes EthInstructions))
+(define (disassemble symbol-table bs)
+  (: ret EthInstructions)
+  (define ret null)
+  (for/assembly bs (λ (n x)
+                     (set! ret (cons x ret))))
+  (reverse ret))
+                       
 (: print-disassembly (-> SymbolTable Bytes Void))
 (define (print-disassembly symbol-table bs)
   (let ([ reverse-symbol-table (invert-hash symbol-table) ])
-    (: loop (-> Integer Void))
-    (define (loop n)
+    (: loop (-> Integer EthInstruction Void))
+    (define (loop n ethi)
       (fprintf (current-output-port) "~x" n)
       (write-char #\tab)
       (display (reverse-symbol-name reverse-symbol-table n))
-      ;; (print `(,(bytes-ref bs n)
-      ;;          ,(push-op? (hash-ref opcodes-by-byte (bytes-ref bs n)))
-      ;;          ,(op-extra-size (hash-ref opcodes-by-byte (bytes-ref bs n)))))
       (write-char #\tab)
-      (let ([ ethi (disassemble-one bs n) ])
-        (cond ((eth-push? ethi)
-               (begin
-                 (define op (ethi->opcode ethi))
-                 (fprintf (current-output-port)
-                          "Push~a 0x~x"
-                          (op-extra-size op)
-                          (eth-push-value ethi))))
-              ((eth-asm? ethi) (write-string (symbol->string (opcode-name (ethi->opcode ethi)))))
-              ((eth-unknown? ethi)
+      (cond ((eth-push? ethi)
+             (begin
+               (define op (ethi->opcode ethi))
                (fprintf (current-output-port)
-                        "BYTE ~a"
-                        (eth-unknown-byte ethi)))
-              (else (error "print-disassembly: Unknown ethi" ethi)))
-        (set! n (+ n (ethi-extra-size ethi))))
-      (newline)
-      (if (>= n (- (bytes-length bs) 1))
-          (void)
-          (loop (+ n 1))))
-    (loop 0)))
+                        "Push~a 0x~x"
+                        (op-extra-size op)
+                        (eth-push-value ethi))))
+            ((eth-op? ethi)
+             (void (write-string (symbol->string (opcode-name (ethi->opcode ethi))))))
+            ((eth-bytes? ethi)
+             (fprintf (current-output-port)
+                      "BYTE ~a"
+                      (bytes->integer (eth-bytes-bytes ethi) #f)))
+            (else (error "print-disassembly: Unknown ethi" ethi))))
+    (for/assembly bs loop)
+    ))
 
 (: bytes-or-zero (-> Bytes Integer Integer Integer))
 (define (bytes-or-zero bs i len)

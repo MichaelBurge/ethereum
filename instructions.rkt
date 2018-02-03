@@ -3,13 +3,45 @@
 (require "types.rkt")
 (require "opcodes.rkt")
 
+(require "typed/binaryio.rkt")
+
 (provide (all-defined-out))
 
 (define assumed-label-size 2)
 
+(: expand-instruction (-> EthInstructionQ EthInstruction))
+(define (expand-instruction x)
+  (match x
+    [`(push  'shrink         ,val) (eth-push 'shrink           (cast val EthWord))]
+    [`(push  ,(? byte? size) ,val) (eth-push  (cast size Byte) (cast val EthWord))]
+    [`(op    (quote ,x))           (eth-op    (cast x Symbol))]
+    [`(byte  ,(? byte? val))       (eth-bytes (bytes (cast val Byte)))]
+    [`(bytes ,(? exact-integer? size)
+             ,(? exact-integer? val))
+     (eth-bytes (integer->bytes val size #f))]
+    [`(label (quote ,(? symbol? name))) (label-definition (cast name Symbol) 0  #f)]
+    [`(label (quote ,(? symbol? name))
+             ,(? exact-integer? os))    (label-definition (cast name Symbol) os #f)]
+    [_ (error "expand-instruction: Unknown syntax" x)]))
+
+
+(: shrink-instruction (-> EthInstruction EthInstructionQ))
+(define (shrink-instruction i)
+  (match i
+    [(struct eth-push ('shrink value))           `(push 'shrink ,value)]
+    [(struct eth-push (size value))              `(push ,size ,value)]
+    [(struct eth-op  (sym))                     `(op (quote ,sym))]
+    [(struct eth-bytes (bs)) (match (bytes-length bs)
+                                   [ 0           `(byte ,(first (bytes->list bs)))]
+                                   [ n           `(bytes ,(bytes->integer bs #f))])]
+    [(struct label-definition (name 0  #f))      `(label (quote ,name))]
+    [(struct label-definition (name os #f))      `(label (quote ,name) ,os)]
+    [(struct label-definition (name os virtual)) `(label (quote ,name) ,os ,virtual)]
+    [_ (error "shrink-instruction: Unknown syntax" i)]))
+
 (: ethi-extra-size (-> EthInstruction Byte))
 (define (ethi-extra-size ethi)
-  (if (eth-unknown? ethi)
+  (if (eth-bytes? ethi)
       0
       (op-extra-size (ethi->opcode ethi))))
 
@@ -33,9 +65,9 @@
         (hash-ref *opcodes-by-byte* b))
       (error "lookup-push-opcode: Push must have a fixed size")))
       
-(: ethi->opcode (-> (U eth-asm eth-push label) opcode))
+(: ethi->opcode (-> (U eth-op eth-push label) opcode))
 (define (ethi->opcode ethi)
-  (cond ((eth-asm? ethi) (lookup-opcode (eth-asm-name ethi)))
+  (cond ((eth-op? ethi) (lookup-opcode (eth-op-name ethi)))
         ((eth-push? ethi) (lookup-push-opcode ethi))
         ((label? ethi) (lookup-opcode 'JUMPDEST))
         (else (error "ethi->opcode: Unknown case"))))
