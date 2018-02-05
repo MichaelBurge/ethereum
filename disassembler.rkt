@@ -32,8 +32,8 @@
                               (+ i 1) ; start position
                               (+ i 1 (op-extra-size op)))))) ; end
 
-(: for/assembly-cont (-> Bytes (-> Integer EthInstruction (U #f Integer)) Void))
-(define (for/assembly-cont bs act)
+(: for/assembly-cont (-> Bytes (-> Integer EthInstruction (U #f Integer)) [#:error? Boolean] Void))
+(define (for/assembly-cont bs act #:error? [error? #f])
   (: loop (-> Integer Void))
   (define (loop n)
     (let ([ ethi (disassemble-one bs n) ])
@@ -41,7 +41,9 @@
         [ #f (void)]
         [ (? integer? m)
           (if (>= m (bytes-length bs))
-              (void)
+              (if error?
+                  (error "for-assembly/cont: Out of range" m bs)
+                  (void))
               (loop m))])))
   (loop 0))
 
