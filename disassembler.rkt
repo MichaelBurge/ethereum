@@ -21,16 +21,15 @@
         (else          (eth-op (opcode-name op)))
         ))
 
-   
+
 (: disassemble-push (-> Bytes Integer EthInstruction))
 (define (disassemble-push bs i)
   (let ([ op (hash-ref *opcodes-by-byte* (bytes-ref bs i)) ])
+    (println `(DEBUG ,(bytes-ref bs i) ,(op-extra-size op)))
     (eth-push (op-extra-size op)
-              (bytes->integer bs
-                              #f      ; signed?
-                              #t      ; big-endian
-                              (+ i 1) ; start position
-                              (+ i 1 (op-extra-size op)))))) ; end
+              (bytes-or-zero bs
+                             (+ i 1) ; start position
+                             (op-extra-size op))))) ; length
 
 (: for/assembly-cont (-> Bytes (-> Integer EthInstruction (U #f Integer)) [#:error? Boolean] Void))
 (define (for/assembly-cont bs act #:error? [error? #f])
@@ -55,14 +54,14 @@
     (+ n (instruction-size ethi)))
   (for/assembly-cont bs loop))
 
-(: disassemble (-> SymbolTable Bytes EthInstructions))
-(define (disassemble symbol-table bs)
+(: disassemble (-> Bytes EthInstructions))
+(define (disassemble bs)
   (: ret EthInstructions)
   (define ret null)
   (for/assembly bs (λ (n x)
                      (set! ret (cons x ret))))
   (reverse ret))
-                       
+
 (: print-disassembly (-> SymbolTable Bytes Void))
 (define (print-disassembly symbol-table bs)
   (let ([ reverse-symbol-table (invert-hash symbol-table) ])

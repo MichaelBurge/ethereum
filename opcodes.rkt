@@ -1,5 +1,8 @@
 #lang typed/racket
 
+;; (require/typed racket
+;;                (member (All (A) (-> A (Listof A) (U A #f)))))
+
 (require "types.rkt")
 
 (provide (all-defined-out))
@@ -31,9 +34,9 @@
     ,(opcode #x18 'XOR        2 1)
     ,(opcode #x19 'NOT        1 1)
     ,(opcode #x1a 'BYTE       2 1)
-    
+
     ,(opcode #x20 'SHA3       2 1)
-    
+
     ,(opcode #x30 'ADDRESS      0 1)
     ,(opcode #x31 'BALANCE      1 1)
     ,(opcode #x32 'ORIGIN       0 1)
@@ -47,14 +50,14 @@
     ,(opcode #x3a 'GASPRICE     0 1)
     ,(opcode #x3b 'EXTCODESIZE  1 1)
     ,(opcode #x3c 'EXTCODECOPY  4 0)
-    
+
     ,(opcode #x40 'BLOCKHASH    1 1)
     ,(opcode #x41 'COINBASE     0 1)
     ,(opcode #x42 'TIMESTAMP    0 1)
     ,(opcode #x43 'NUMBER       0 1)
     ,(opcode #x44 'DIFFICULTY   0 1)
     ,(opcode #x45 'GASLIMIT     0 1)
-    
+
     ,(opcode #x50 'POP          1 0)
     ,(opcode #x51 'MLOAD        1 1)
     ,(opcode #x52 'MSTORE       2 0)
@@ -67,7 +70,7 @@
     ,(opcode #x59 'MSIZE        0 1)
     ,(opcode #x5a 'GAS          0 1)
     ,(opcode #x5b 'JUMPDEST     0 0)
-    
+
     ,(opcode #x60 'PUSH1        0 1)
     ,(opcode #x61 'PUSH2        0 1)
     ,(opcode #x62 'PUSH3        0 1)
@@ -100,7 +103,7 @@
     ,(opcode #x7d 'PUSH30       0 1)
     ,(opcode #x7e 'PUSH31       0 1)
     ,(opcode #x7f 'PUSH32       0 1)
-    
+
     ,(opcode #x80 'DUP1         1 2)
     ,(opcode #x81 'DUP2         2 3)
     ,(opcode #x82 'DUP3         3 4)
@@ -117,7 +120,7 @@
     ,(opcode #x8d 'DUP14        14 15)
     ,(opcode #x8e 'DUP15        15 16)
     ,(opcode #x8f 'DUP16        16 17)
-    
+
     ,(opcode #x90 'SWAP1        2 2)
     ,(opcode #x91 'SWAP2        3 3)
     ,(opcode #x92 'SWAP3        4 4)
@@ -134,19 +137,19 @@
     ,(opcode #x9d 'SWAP14       15 15)
     ,(opcode #x9e 'SWAP15       16 16)
     ,(opcode #x9f 'SWAP16       17 17)
-    
+
     ,(opcode #xa0 'LOG0 2 0)
     ,(opcode #xa1 'LOG1 3 0)
     ,(opcode #xa2 'LOG2 4 0)
     ,(opcode #xa3 'LOG3 5 0)
     ,(opcode #xa4 'LOG3 6 0)
-    
+
     ,(opcode #xf0 'CREATE       3 1)
     ,(opcode #xf1 'CALL         7 1)
     ,(opcode #xf2 'CALLCODE     7 1)
     ,(opcode #xf3 'RETURN       2 0)
     ,(opcode #xf4 'DELEGATECALL 6 1)
-    
+
     ,(opcode #xfd 'REVERT       0 0)
     ,(opcode #xfe 'INVALID      0 0)
     ,(opcode #xff 'SUICIDE      1 0)
@@ -166,6 +169,12 @@
 (: lookup-opcode (-> Symbol opcode))
 (define (lookup-opcode sym)
   (hash-ref *opcodes-by-sym* sym))
+
+
+(: sym-opcode? (-> Symbol Boolean))
+(define (sym-opcode? x)
+  (hash-has-key? *opcodes-by-sym* x)
+  )
 
 (: push-op? (-> opcode Boolean))
 (define (push-op? op)
@@ -199,3 +208,26 @@
 (: swap-size (-> opcode Integer))
 (define (swap-size op)
   (- (opcode-byte op) #x8f))
+
+(: sym-num-reads (-> Symbol Integer))
+(define (sym-num-reads sym)
+  (opcode-num-reads (lookup-opcode sym))
+  )
+
+(: sym-num-writes (-> Symbol Integer))
+(define (sym-num-writes sym)
+  (opcode-num-writes (lookup-opcode sym))
+  )
+
+(: sym-halt? (-> Symbol Boolean))
+(define (sym-halt? sym)
+  (if (member sym '(RETURN REVERT INVALID SUICIDE))
+      #t
+      #f)
+  )
+
+(: sym-fallthrough? (-> Symbol Boolean))
+(define (sym-fallthrough? sym)
+  (not (or (sym-halt? sym)
+           (equal? sym 'JUMP))) ; NOTE: JUMPI is intentionally allowed
+  )
