@@ -25,7 +25,6 @@
 (: disassemble-push (-> Bytes Integer EthInstruction))
 (define (disassemble-push bs i)
   (let ([ op (hash-ref *opcodes-by-byte* (bytes-ref bs i)) ])
-    (println `(DEBUG ,(bytes-ref bs i) ,(op-extra-size op)))
     (eth-push (op-extra-size op)
               (bytes-or-zero bs
                              (+ i 1) ; start position
